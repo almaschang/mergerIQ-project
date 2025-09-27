@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  body {
+    @apply antialiased bg-gray-100 dark:bg-[#1a1b26] text-gray-900 dark:text-white transition-colors;
+  }
+}
+
+/* TradingView widget dark mode fixes */
+.dark .tradingview-widget-container iframe {
+  filter: invert(90%) hue-rotate(180deg);
+}
+
+/* Prevent double inversion of images in dark mode */
+.dark .tradingview-widget-container iframe img {
+  filter: invert(1) hue-rotate(180deg);
+}
