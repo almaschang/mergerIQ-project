@@ -22,12 +22,12 @@ export default function Navbar({ onCompanySelect, onNavigate, currentPage }: Nav
 
   return (
     <nav className="bg-white dark:bg-dark-50 border-b border-gray-200 dark:border-dark-200">
-      <div className="max-w-7xl mx-auto px-4">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-10">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <div className="flex-shrink-0 flex items-center">
               <BarChart2 className="h-8 w-8 text-blue-600" />
-              <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">PitchBook</span>
+              <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">MergerIQ</span>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
               <button

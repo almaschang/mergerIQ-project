@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, X } from 'lucide-react';
 import { useCompareStocks } from '../../hooks/useCompareStocks';
+import { buildPeerUniverse } from '../../hooks/useScenarioCopilot';
 import ComparisonTable from './comparison/ComparisonTable';
 import ComparisonCharts from './comparison/ComparisonCharts';
-import { Search, X } from 'lucide-react';
 import { API_CONFIG } from '../../config/api';
 import { fetchWithFmpApiKey } from '../../utils/market/fmpApiKeys';
+import { ComparisonData } from '../../types/comparison';
 
 interface CompanyComparisonProps {
   mainSymbol: string;
@@ -26,93 +28,58 @@ interface FinancialMetrics {
 }
 
 export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps) {
+  const normalizedMain = mainSymbol.toUpperCase();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([mainSymbol]);
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([normalizedMain]);
   const [financialMetrics, setFinancialMetrics] = useState<FinancialMetrics>({});
+
   const { comparisons, isLoading: isLoadingComparisons } = useCompareStocks(selectedSymbols);
 
   useEffect(() => {
-    // Fetch similar companies when component mounts
-    const fetchSimilarCompanies = async () => {
-      try {
-        // First try to get peer companies
-        const peersResponse = await fetchWithFmpApiKey(
-          `${API_CONFIG.FMP_BASE_URL}/stock_peers?symbol=${mainSymbol}`
-        );
-        
-        if (!peersResponse.ok) {
-          throw new Error(`Error fetching peers: ${peersResponse.status}`);
-        }
-        
-        const peersData = await peersResponse.json();
-        
-        if (Array.isArray(peersData) && peersData.length > 0 && peersData[0].peersList) {
-          // Get top 3 peers and add them to selected symbols
-          const peers = peersData[0].peersList.slice(0, 3);
-          setSelectedSymbols(prevSymbols => {
-            const newSymbols = [...new Set([mainSymbol, ...peers])];
-            return newSymbols.slice(0, 6); // Limit to 6 companies
-          });
-        } else {
-          // If no peers found, try to get companies in the same sector
-          const profileResponse = await fetchWithFmpApiKey(
-            `${API_CONFIG.FMP_BASE_URL}/profile/${mainSymbol}`
-          );
-          
-          if (!profileResponse.ok) {
-            throw new Error(`Error fetching profile: ${profileResponse.status}`);
-          }
-          
-          const profileData = await profileResponse.json();
-          if (profileData && profileData[0]?.sector) {
-            const sectorResponse = await fetchWithFmpApiKey(
-              `${API_CONFIG.FMP_BASE_URL}/stock-screener?sector=${encodeURIComponent(profileData[0].sector)}&limit=5`
-            );
-            
-            if (!sectorResponse.ok) {
-              throw new Error(`Error fetching sector companies: ${sectorResponse.status}`);
-            }
-            
-            const sectorData = await sectorResponse.json();
-            if (Array.isArray(sectorData)) {
-              const sectorPeers = sectorData
-                .filter(company => company.symbol !== mainSymbol)
-                .slice(0, 3)
-                .map(company => company.symbol);
-              
-              setSelectedSymbols(prevSymbols => {
-                const newSymbols = [...new Set([mainSymbol, ...sectorPeers])];
-                return newSymbols.slice(0, 6);
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching similar companies:', error);
-      }
-    };
-
-    fetchSimilarCompanies();
-  }, [mainSymbol]);
+    setSelectedSymbols([normalizedMain]);
+  }, [normalizedMain]);
 
   useEffect(() => {
-    // Fetch financial metrics for selected symbols
+    let cancelled = false;
+
+    const hydratePeers = async () => {
+      const universe = await buildPeerUniverse(normalizedMain);
+      if (cancelled || !universe.length) {
+        return;
+      }
+
+      const normalized = universe.map((symbol) => symbol.toUpperCase()).slice(0, 6);
+
+      setSelectedSymbols((prev) => {
+        const isSame = prev.length === normalized.length && prev.every((sym, index) => sym === normalized[index]);
+        return isSame ? prev : normalized;
+      });
+    };
+
+    hydratePeers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedMain]);
+
+  useEffect(() => {
     const fetchFinancialMetrics = async () => {
       const metrics: FinancialMetrics = {};
-      
+
       await Promise.all(
         selectedSymbols.map(async (symbol) => {
           try {
             const response = await fetchWithFmpApiKey(
               `${API_CONFIG.FMP_BASE_URL}/key-metrics-ttm/${symbol}`
             );
-            
+
             if (!response.ok) {
               throw new Error(`Error fetching metrics: ${response.status}`);
             }
-            
+
             const data = await response.json();
-            
+
             if (Array.isArray(data) && data.length > 0) {
               metrics[symbol] = {
                 peRatio: data[0].peRatioTTM || 0,
@@ -142,22 +109,22 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
   }, [selectedSymbols]);
 
   const handleAddCompany = async () => {
-    if (!searchQuery.trim() || selectedSymbols.includes(searchQuery.toUpperCase())) return;
-    if (selectedSymbols.length >= 6) return; // Limit to 6 companies
+    const normalizedQuery = searchQuery.trim().toUpperCase();
+    if (!normalizedQuery || selectedSymbols.includes(normalizedQuery) || selectedSymbols.length >= 6) return;
 
     try {
       const response = await fetchWithFmpApiKey(
-        `${API_CONFIG.FMP_BASE_URL}/profile/${searchQuery}`
+        `${API_CONFIG.FMP_BASE_URL}/profile/${normalizedQuery}`
       );
-      
+
       if (!response.ok) {
         throw new Error(`Error validating symbol: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (Array.isArray(data) && data.length > 0) {
-        setSelectedSymbols(prev => [...prev, searchQuery.toUpperCase()]);
+        setSelectedSymbols(prev => [...prev, normalizedQuery]);
         setSearchQuery('');
       }
     } catch (error) {
@@ -166,10 +133,27 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
   };
 
   const handleRemoveCompany = (symbol: string) => {
-    if (symbol !== mainSymbol) {
+    if (symbol !== normalizedMain) {
       setSelectedSymbols(prev => prev.filter(s => s !== symbol));
     }
   };
+
+  const orderedComparisons = useMemo<ComparisonData[]>(() => {
+    if (!comparisons.length) {
+      return [];
+    }
+
+    const map = new Map(comparisons.map((item) => [item.symbol, item]));
+    const ordered = selectedSymbols
+      .map((symbol) => map.get(symbol))
+      .filter((item): item is ComparisonData => Boolean(item));
+
+    if (!ordered.length) {
+      return comparisons;
+    }
+
+    return ordered;
+  }, [comparisons, selectedSymbols]);
 
   return (
     <div className="space-y-6">
@@ -203,14 +187,14 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
                 key={symbol}
                 className={`
                   inline-flex items-center px-3 py-1 rounded-full text-sm
-                  ${symbol === mainSymbol
+                  ${symbol === normalizedMain
                     ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                     : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
                   }
                 `}
               >
                 {symbol}
-                {symbol !== mainSymbol && (
+                {symbol !== normalizedMain && (
                   <X 
                     className="h-4 w-4 ml-2 cursor-pointer" 
                     onClick={() => handleRemoveCompany(symbol)}
@@ -222,15 +206,16 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
         </div>
 
         <ComparisonTable 
-          data={comparisons}
+          data={orderedComparisons.length ? orderedComparisons : comparisons}
           isLoading={isLoadingComparisons}
-          mainSymbol={mainSymbol}
+          mainSymbol={normalizedMain}
           onRemoveCompany={handleRemoveCompany}
           financialMetrics={financialMetrics}
         />
       </div>
 
-      <ComparisonCharts symbols={selectedSymbols} mainSymbol={mainSymbol} />
+      <ComparisonCharts companies={orderedComparisons.length ? orderedComparisons : comparisons} mainSymbol={normalizedMain} />
     </div>
   );
 }
+

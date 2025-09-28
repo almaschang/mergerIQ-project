@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useCompanyDetail } from '../../hooks/useCompanyDetail';
-import { useTranscripts } from '../../hooks/useTranscripts';
-import CompanyTabs from './CompanyTabs';
+import CompanyTabs, { CompanyTab } from './CompanyTabs';
 import CompanyOverview from './CompanyOverview';
 import CompanyStock from './CompanyStock';
-import CompanyTranscripts from './CompanyTranscripts';
 import CompanyFinancials from './CompanyFinancials';
 import CompanyNews from './CompanyNews';
 import CompanyFilings from './CompanyFilings';
@@ -13,6 +11,9 @@ import CompanyComparison from './CompanyComparison';
 import LoadingState from '../common/LoadingState';
 import AISummaryTab from './AISummaryTab';
 import EarningsCallsTab from './EarningsCallsTab';
+import EvidenceLane from './evidence/EvidenceLane';
+import ScenarioStressCopilot from './stress/ScenarioStressCopilot';
+import RegulatoryRiskRadar from './risk/RegulatoryRiskRadar';
 
 interface CompanyDetailProps {
   symbol: string;
@@ -20,15 +21,9 @@ interface CompanyDetailProps {
 }
 
 export default function CompanyDetail({ symbol, onBack }: CompanyDetailProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'stock' | 'transcripts' | 'financials' | 'news' | 'filings' | 'compare' | 'earnings'>('overview');
+  const [activeTab, setActiveTab] = useState<CompanyTab>('overview');
   const { profile, news, isLoading, isError } = useCompanyDetail(symbol);
-  const { 
-    transcripts, 
-    selectedTranscript, 
-    isLoading: transcriptsLoading,
-    selectTranscript,
-    clearSelection 
-  } = useTranscripts(symbol);
+  const containerClasses = 'w-full px-4 sm:px-6 lg:px-10 py-8';
 
   const companyData = {
     profile: {
@@ -50,7 +45,7 @@ export default function CompanyDetail({ symbol, onBack }: CompanyDetailProps) {
 
   if (isError) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className={containerClasses}>
         <div className="bg-red-50 p-4 rounded-md">
           <p className="text-red-700">Unable to load company information.</p>
         </div>
@@ -64,7 +59,7 @@ export default function CompanyDetail({ symbol, onBack }: CompanyDetailProps) {
 
   if (!profile) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className={containerClasses}>
         <div className="bg-yellow-50 p-4 rounded-md">
           <p className="text-yellow-700">Company not found.</p>
         </div>
@@ -73,7 +68,7 @@ export default function CompanyDetail({ symbol, onBack }: CompanyDetailProps) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className={containerClasses}>
       <button
         onClick={onBack}
         className="flex items-center text-gray-600 hover:text-gray-900 mb-6"
@@ -88,6 +83,12 @@ export default function CompanyDetail({ symbol, onBack }: CompanyDetailProps) {
 
           {activeTab === 'overview' ? (
             <CompanyOverview profile={profile} symbol={symbol} news={news} />
+          ) : activeTab === 'evidence' ? (
+            <EvidenceLane symbol={symbol} />
+          ) : activeTab === 'stress' ? (
+            <ScenarioStressCopilot symbol={symbol} />
+          ) : activeTab === 'risk' ? (
+            <RegulatoryRiskRadar symbol={symbol} />
           ) : activeTab === 'stock' ? (
             <CompanyStock symbol={symbol} />
           ) : activeTab === 'financials' ? (

@@ -1,5 +1,6 @@
 export interface ComparisonData {
   symbol: string;
+  exchange?: string;
   name: string;
   sector: string;
   industry: string;
@@ -15,3 +16,5 @@ export interface ComparisonData {
   analystCount: number;
   wallStreetAnalysts: number;
 }
+
+
