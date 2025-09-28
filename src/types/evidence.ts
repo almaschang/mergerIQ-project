@@ -63,3 +63,71 @@ export interface EvidenceGraph {
   timeline: EvidenceTimelineEvent[];
   overallConfidence: number;
 }
+
+export type EvidenceSourceChannel = 'news' | 'filing' | 'transcript';
+
+export interface EvidenceSourceBreakdown {
+  channel: EvidenceSourceChannel;
+  supportWeight: number;
+  challengeWeight: number;
+  supportCount: number;
+  challengeCount: number;
+  averageFreshness: number;
+  averageReliability: number;
+  mostRecentTimestamp: number | null;
+}
+
+export type EvidenceFactCheckStatus = 'supported' | 'contradicted' | 'needs-review';
+export type EvidenceRefreshReason = 'stale' | 'low-confidence' | 'contradiction' | 'missing';
+export type EvidencePriority = 'low' | 'medium' | 'high';
+
+export interface EvidenceContradictionAlert {
+  id: string;
+  insightId: string;
+  nodeId: string;
+  channel: EvidenceSourceChannel;
+  severity: EvidencePriority;
+  message: string;
+  timestamp: number;
+  url?: string;
+}
+
+export interface EvidenceRefreshRecommendation {
+  id: string;
+  channel: EvidenceSourceChannel;
+  reason: EvidenceRefreshReason;
+  priority: EvidencePriority;
+  message: string;
+}
+
+export interface EvidenceFactCheckSource {
+  id: string;
+  title: string;
+  relation: EvidenceRelation;
+  timestamp: number;
+  freshness: number;
+  reliability: number;
+  url?: string;
+}
+
+export interface EvidenceFactCheckEntry {
+  id: string;
+  insightId: string;
+  claim: string;
+  status: EvidenceFactCheckStatus;
+  confidence: number;
+  sources: EvidenceFactCheckSource[];
+  updatedAt: number;
+}
+
+export interface EvidenceCoherenceSummary {
+  overallScore: number;
+  breakdowns: EvidenceSourceBreakdown[];
+}
+
+export interface EvidenceIntelligenceReport {
+  coherence: EvidenceCoherenceSummary;
+  contradictions: EvidenceContradictionAlert[];
+  refreshQueue: EvidenceRefreshRecommendation[];
+  factChecks: EvidenceFactCheckEntry[];
+}

@@ -1,5 +1,6 @@
 import useSWR from 'swr';
 import { buildEvidenceGraph } from '../utils/intelligence/evidenceGraph';
+import { analyzeEvidenceCoherence } from '../utils/intelligence/evidenceCoherence';
 import { getCompanyNews } from '../utils/market/companyNews';
 import { getCompanyFilings } from '../utils/market/secService';
 import { getCompanyTranscripts, getTranscriptDetails } from '../utils/market/transcriptService';
@@ -7,10 +8,11 @@ import { analyzeNewsSentimentWithAI } from '../utils/ai/analysis/sentimentAnalyz
 import { generateMarketInsightsWithAI } from '../utils/ai/analysis/marketAnalyzer';
 import { getCompanyProfile } from '../utils/market/companyProfile';
 import { MarketInsight } from '../types/ai';
-import { EvidenceGraph } from '../types/evidence';
+import { EvidenceGraph, EvidenceIntelligenceReport } from '../types/evidence';
 
 interface EvidenceGraphResult {
   graph: EvidenceGraph | null;
+  intelligence: EvidenceIntelligenceReport | null;
   isLoading: boolean;
   isValidating: boolean;
   isError: any;
@@ -66,12 +68,17 @@ export function useEvidenceGraph(symbol: string | null): EvidenceGraphResult {
         insights = [createFallbackInsight(symbol, sentiment.reasoning, sentiment.confidence)];
       }
 
-      return buildEvidenceGraph({
+      const graph = buildEvidenceGraph({
         insights,
         news: trimmedNews,
         filings,
         transcripts: cleanTranscripts
       });
+
+      return {
+        graph,
+        intelligence: analyzeEvidenceCoherence(graph)
+      };
     },
     {
       revalidateOnFocus: false,
@@ -80,7 +87,8 @@ export function useEvidenceGraph(symbol: string | null): EvidenceGraphResult {
   );
 
   return {
-    graph: data ?? null,
+    graph: data?.graph ?? null,
+    intelligence: data?.intelligence ?? null,
     isLoading: !error && !data,
     isValidating,
     isError: error

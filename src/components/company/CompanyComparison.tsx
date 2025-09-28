@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X, AlertTriangle } from 'lucide-react';
 import { useCompareStocks } from '../../hooks/useCompareStocks';
 import { buildPeerUniverse } from '../../hooks/useScenarioCopilot';
+import { usePeerDrift } from '../../hooks/usePeerDrift';
 import ComparisonTable from './comparison/ComparisonTable';
 import ComparisonCharts from './comparison/ComparisonCharts';
 import { API_CONFIG } from '../../config/api';
@@ -27,6 +28,65 @@ interface FinancialMetrics {
   };
 }
 
+function PeerDriftPanel({
+  primarySymbol,
+  isLoading,
+  report
+}: {
+  primarySymbol: string;
+  isLoading: boolean;
+  report: ReturnType<typeof usePeerDrift>['report'];
+}) {
+  if (isLoading) {
+    return (
+      <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-6 text-sm text-gray-500">
+        Calculating peer drift...
+      </div>
+    );
+  }
+
+  if (!report || !report.drivers.length) {
+    return (
+      <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-6 text-sm text-gray-500">
+        No drift signals detected yet for {primarySymbol}.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase text-gray-400 tracking-wide">Peer Drift Monitor</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+            Overall drift score {(report.overallDriftScore).toFixed(2)}
+          </p>
+        </div>
+        {report.alerts.length > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs text-rose-500">
+            <AlertTriangle className="h-4 w-4" /> {report.alerts.length} alert{report.alerts.length > 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+      <div className="mt-4 space-y-3">
+        {report.drivers.map((driver) => (
+          <div key={driver.peerSymbol} className="border border-gray-200 dark:border-dark-200 rounded-md p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">{driver.peerSymbol}</p>
+              <span className="text-xs text-gray-500">Drift score {driver.driftScore.toFixed(2)}</span>
+            </div>
+            <ul className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+              <li>{driver.priceCommentary}</li>
+              <li>{driver.valuationCommentary}</li>
+              <li>{driver.disclosureCommentary}</li>
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps) {
   const normalizedMain = mainSymbol.toUpperCase();
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,27 +100,12 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
   }, [normalizedMain]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const hydratePeers = async () => {
+    (async () => {
       const universe = await buildPeerUniverse(normalizedMain);
-      if (cancelled || !universe.length) {
-        return;
+      if (universe.length) {
+        setSelectedSymbols(universe);
       }
-
-      const normalized = universe.map((symbol) => symbol.toUpperCase()).slice(0, 6);
-
-      setSelectedSymbols((prev) => {
-        const isSame = prev.length === normalized.length && prev.every((sym, index) => sym === normalized[index]);
-        return isSame ? prev : normalized;
-      });
-    };
-
-    hydratePeers();
-
-    return () => {
-      cancelled = true;
-    };
+    })();
   }, [normalizedMain]);
 
   useEffect(() => {
@@ -108,6 +153,13 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
     }
   }, [selectedSymbols]);
 
+  const peerSymbols = useMemo(
+    () => selectedSymbols.filter((symbol) => symbol !== normalizedMain),
+    [selectedSymbols, normalizedMain]
+  );
+
+  const { report: driftReport, isLoading: driftLoading } = usePeerDrift(normalizedMain, peerSymbols);
+
   const handleAddCompany = async () => {
     const normalizedQuery = searchQuery.trim().toUpperCase();
     if (!normalizedQuery || selectedSymbols.includes(normalizedQuery) || selectedSymbols.length >= 6) return;
@@ -124,7 +176,7 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
       const data = await response.json();
 
       if (Array.isArray(data) && data.length > 0) {
-        setSelectedSymbols(prev => [...prev, normalizedQuery]);
+        setSelectedSymbols((prev) => [...prev, normalizedQuery]);
         setSearchQuery('');
       }
     } catch (error) {
@@ -134,7 +186,7 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
 
   const handleRemoveCompany = (symbol: string) => {
     if (symbol !== normalizedMain) {
-      setSelectedSymbols(prev => prev.filter(s => s !== symbol));
+      setSelectedSymbols((prev) => prev.filter((s) => s !== symbol));
     }
   };
 
@@ -182,7 +234,7 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
             </button>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {selectedSymbols.map(symbol => (
+            {selectedSymbols.map((symbol) => (
               <div
                 key={symbol}
                 className={`
@@ -195,8 +247,8 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
               >
                 {symbol}
                 {symbol !== normalizedMain && (
-                  <X 
-                    className="h-4 w-4 ml-2 cursor-pointer" 
+                  <X
+                    className="h-4 w-4 ml-2 cursor-pointer"
                     onClick={() => handleRemoveCompany(symbol)}
                   />
                 )}
@@ -205,7 +257,7 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
           </div>
         </div>
 
-        <ComparisonTable 
+        <ComparisonTable
           data={orderedComparisons.length ? orderedComparisons : comparisons}
           isLoading={isLoadingComparisons}
           mainSymbol={normalizedMain}
@@ -214,8 +266,11 @@ export default function CompanyComparison({ mainSymbol }: CompanyComparisonProps
         />
       </div>
 
+      <PeerDriftPanel primarySymbol={normalizedMain} isLoading={driftLoading} report={driftReport} />
+
       <ComparisonCharts companies={orderedComparisons.length ? orderedComparisons : comparisons} mainSymbol={normalizedMain} />
     </div>
   );
 }
+
 

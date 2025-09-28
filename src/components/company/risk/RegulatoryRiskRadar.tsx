@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { AlertTriangle, BellRing, FileSignature, Loader2, Radar } from 'lucide-react';
+import { AlertTriangle, BellRing, FileSignature, Loader2, Radar, Edit3, Grid } from 'lucide-react';
 import { useRegulatoryRisk } from '../../../hooks/useRegulatoryRisk';
+import { useDisclosureSimulator } from '../../../hooks/useDisclosureSimulator';
+import { useStakeholderMatrix } from '../../../hooks/useStakeholderMatrix';
 import { RiskPriority } from '../../../types/risk';
 
 interface RegulatoryRiskRadarProps {
@@ -15,14 +17,22 @@ function priorityBadge(priority: RiskPriority): string {
 
 export default function RegulatoryRiskRadar({ symbol }: RegulatoryRiskRadarProps) {
   const { report, isLoading, isValidating, isError, generateAdvisory } = useRegulatoryRisk(symbol);
+  const { report: matrixReport, isLoading: matrixLoading } = useStakeholderMatrix(symbol);
+  const { report: simulationReport, isSimulating, error: simulationError, simulate } = useDisclosureSimulator(symbol);
+
   const [advisory, setAdvisory] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [draftText, setDraftText] = useState('');
 
   const handleGenerate = async () => {
     setIsGenerating(true);
     const response = await generateAdvisory();
     setAdvisory(response);
     setIsGenerating(false);
+  };
+
+  const handleSimulate = async () => {
+    await simulate({ text: draftText });
   };
 
   if (isLoading) {
@@ -52,7 +62,7 @@ export default function RegulatoryRiskRadar({ symbol }: RegulatoryRiskRadarProps
             <div>
               <p className="text-xs uppercase text-gray-400 tracking-wide">Regulatory Risk Index</p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">{report.overallRiskIndex.toFixed(1)} / 100</p>
-              <p className="text-xs text-gray-400">Disclosure gap {report.disclosureGapIndex.toFixed(1)} • Sentiment skew {report.sentimentSkew.toFixed(1)}</p>
+              <p className="text-xs text-gray-400">Disclosure gap {report.disclosureGapIndex.toFixed(1)} | Sentiment skew {report.sentimentSkew.toFixed(1)}</p>
             </div>
           </div>
           {isValidating && (
@@ -133,6 +143,97 @@ export default function RegulatoryRiskRadar({ symbol }: RegulatoryRiskRadarProps
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Edit3 className="h-5 w-5 text-blue-500" />
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Disclosure Simulator</p>
+              <p className="text-xs text-gray-400">Draft messaging and evaluate compliance risk before publishing.</p>
+            </div>
+          </div>
+          <button
+            onClick={handleSimulate}
+            disabled={isSimulating || !draftText.trim()}
+            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50"
+          >
+            {isSimulating ? 'Scoring...' : 'Simulate Disclosure'}
+          </button>
+        </div>
+        <textarea
+          value={draftText}
+          onChange={(e) => setDraftText(e.target.value)}
+          placeholder="Paste draft disclosure or earnings talking points here..."
+          className="mt-4 w-full min-h-[140px] rounded-md border border-gray-200 dark:border-dark-200 bg-white dark:bg-dark-100 p-3 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        {simulationError && (
+          <p className="mt-2 text-xs text-red-500">{simulationError.message}</p>
+        )}
+        {simulationReport && (
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm text-gray-700 dark:text-gray-200">
+            <div className="rounded-md border border-gray-200 dark:border-dark-200 p-3">
+              <p className="text-xs uppercase text-gray-400">Compliance Score</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{Math.round(simulationReport.score.complianceScore * 100)}%</p>
+              <p className="text-xs text-gray-500">Risk delta {simulationReport.score.riskDelta.toFixed(2)}</p>
+            </div>
+            <div className="rounded-md border border-gray-200 dark:border-dark-200 p-3">
+              <p className="text-xs uppercase text-gray-400">Sentiment Shift</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{Math.round(simulationReport.score.sentimentShift * 100)}%</p>
+              <p className="text-xs text-gray-500">Regulator risk {Math.round(simulationReport.score.regulatorRisk * 100)}%</p>
+            </div>
+            <div className="rounded-md border border-gray-200 dark:border-dark-200 p-3">
+              <p className="text-xs uppercase text-gray-400">Stakeholder Risks</p>
+              <p className="text-xs text-gray-500">Investors {Math.round(simulationReport.score.investorRisk * 100)}% · Suppliers {Math.round(simulationReport.score.supplierRisk * 100)}% · Workforce {Math.round(simulationReport.score.workforceRisk * 100)}%</p>
+            </div>
+          </div>
+        )}
+        {simulationReport?.recommendations.length ? (
+          <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
+            <p className="font-semibold text-gray-900 dark:text-white">Recommendations</p>
+            {simulationReport.recommendations.map((rec) => (
+              <div key={rec.id} className="border border-gray-200 dark:border-dark-200 rounded-md p-3">
+                <p className="font-medium">{rec.message}</p>
+                {rec.supportingEvidence && rec.supportingEvidence.length > 0 && (
+                  <ul className="mt-2 text-xs text-gray-400 list-disc list-inside">
+                    {rec.supportingEvidence.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Grid className="h-5 w-5 text-blue-500" />
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Stakeholder Response Matrix</p>
+            <p className="text-xs text-gray-400">Anticipate reactions from key stakeholder groups.</p>
+          </div>
+        </div>
+        {matrixLoading && (
+          <p className="text-sm text-gray-500">Calculating stakeholder signals...</p>
+        )}
+        {!matrixLoading && matrixReport && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {matrixReport.signals.map((signal) => (
+              <div key={signal.stakeholder} className="border border-gray-200 dark:border-dark-200 rounded-md p-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-gray-900 dark:text-white font-semibold">
+                    {signal.stakeholder.charAt(0).toUpperCase() + signal.stakeholder.slice(1)}
+                  </p>
+                  <span className="text-xs text-gray-500">Risk {(signal.risk * 100).toFixed(0)}% | Opportunity {(signal.opportunity * 100).toFixed(0)}%</span>
+                </div>
+                <p className="mt-2 text-gray-600 dark:text-gray-300 text-xs">{signal.commentary}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-6">

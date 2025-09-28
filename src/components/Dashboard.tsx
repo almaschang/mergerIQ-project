@@ -3,6 +3,8 @@ import TickerTape from './market/TickerTape';
 import MarketOverview from './market/MarketOverview';
 import NewsCategoryToolbar, { NewsCategory } from './market/NewsCategoryToolbar';
 import CategorizedNews from './market/CategorizedNews';
+import ActionMarketplace from './market/ActionMarketplace';
+import IntelligenceHistory from './dashboard/IntelligenceHistory';
 
 export default function Dashboard() {
   const [selectedCategory, setSelectedCategory] = useState<NewsCategory>('trending');
@@ -23,16 +25,19 @@ export default function Dashboard() {
           </div>
 
           {/* Main Content */}
-          <div className="col-span-12 lg:col-span-9">
+          <div className="col-span-12 lg:col-span-9 space-y-6">
             <div className="grid grid-cols-1 gap-6">
               {selectedCategory === 'trending' && <MarketOverview />}
               <div className="bg-white dark:bg-dark-100 shadow rounded-lg p-6">
                 <CategorizedNews category={selectedCategory} />
               </div>
             </div>
+            <ActionMarketplace />
+            <IntelligenceHistory />
           </div>
         </div>
       </div>
     </div>
   );
 }
+

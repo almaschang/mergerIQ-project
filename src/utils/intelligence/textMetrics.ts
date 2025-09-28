@@ -44,6 +44,10 @@ export function computeFreshnessScore(timestamp: number): number {
   return 0.2;
 }
 
+export function hoursSince(timestamp: number, reference: number = Date.now()): number {
+  return Math.abs(reference - timestamp) / (1000 * 60 * 60);
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -51,4 +55,10 @@ export function clamp(value: number, min: number, max: number): number {
 export function roundTo(value: number, decimals: number): number {
   const factor = Math.pow(10, decimals);
   return Math.round(value * factor) / factor;
+}
+
+export function average(values: number[]): number {
+  if (!values.length) return 0;
+  const total = values.reduce((sum, current) => sum + current, 0);
+  return total / values.length;
 }

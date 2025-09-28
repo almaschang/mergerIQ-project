@@ -52,6 +52,24 @@ export interface ScenarioResult {
   commentary: string;
 }
 
+export type ScenarioModelId = 'deterministic' | 'historical-analog' | 'narrative';
+
+export interface ScenarioModelEvaluation {
+  modelId: ScenarioModelId;
+  label: string;
+  confidence: number;
+  rationale: string;
+  evidence?: string[];
+}
+
+export interface ScenarioArbitrationResult {
+  scenarioId: string;
+  generatedAt: number;
+  blendedConfidence: number;
+  consensusRecommendation: string;
+  modelEvaluations: ScenarioModelEvaluation[];
+}
+
 export interface ScenarioPlaybook {
   scenarioId: string;
   generatedAt: number;

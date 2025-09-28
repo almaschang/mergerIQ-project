@@ -1,6 +1,8 @@
 import useSWR from 'swr';
-import { ScenarioCompanyBaseline, ScenarioResult } from '../types/scenario';
+import { ScenarioCompanyBaseline, ScenarioResult, ScenarioArbitrationResult } from '../types/scenario';
 import { simulateScenario, SCENARIO_DEFINITIONS } from '../utils/intelligence/scenarioSimulator';
+import { arbitrateScenario } from '../utils/intelligence/scenarioArbitration';
+import { recordScenarioSnapshot } from '../utils/market/historyStore';
 import { fetchWithFmpApiKey } from '../utils/market/fmpApiKeys';
 import { generateDeepseekResponse } from '../services/deepseekService';
 import { API_CONFIG } from '../config/api';
@@ -10,7 +12,7 @@ interface ScenarioCopilotResult {
   isLoading: boolean;
   isValidating: boolean;
   isError: any;
-  runScenario: (scenarioId: string) => ScenarioResult | null;
+  runScenario: (scenarioId: string) => Promise<{ result: ScenarioResult; arbitration: ScenarioArbitrationResult } | null>;
   generatePlaybook: (scenarioId: string, result: ScenarioResult) => Promise<string>;
 }
 
@@ -49,7 +51,6 @@ export async function buildPeerUniverse(symbol: string): Promise<string[]> {
     }
   };
 
-  // Step 1: direct peer list
   const peerData = await fetchJson<Array<{ peersList?: string[] }>>(
     `${API_CONFIG.FMP_BASE_URL}/stock_peers?symbol=${primary}`
   );
@@ -57,7 +58,6 @@ export async function buildPeerUniverse(symbol: string): Promise<string[]> {
     addSymbols(peerData[0].peersList);
   }
 
-  // Fetch profile for additional context
   const profileData = await fetchJson<Array<any>>(
     `${API_CONFIG.FMP_BASE_URL}/profile/${primary}`
   );
@@ -170,9 +170,13 @@ export function useScenarioCopilot(symbol: string | null): ScenarioCopilotResult
     }
   );
 
-  const runScenario = (scenarioId: string): ScenarioResult | null => {
+  const runScenario = async (scenarioId: string) => {
     if (!symbol || !data?.length) return null;
-    return simulateScenario(data, scenarioId, symbol.toUpperCase());
+    const upperSymbol = symbol.toUpperCase();
+    const result = simulateScenario(data, scenarioId, upperSymbol);
+    const arbitration = await arbitrateScenario(scenarioId, result, data, upperSymbol);
+    recordScenarioSnapshot(upperSymbol, result, arbitration);
+    return { result, arbitration };
   };
 
   const generatePlaybook = async (scenarioId: string, result: ScenarioResult): Promise<string> => {
@@ -214,3 +218,4 @@ Keep it concise and actionable.`;
     generatePlaybook
   };
 }
+

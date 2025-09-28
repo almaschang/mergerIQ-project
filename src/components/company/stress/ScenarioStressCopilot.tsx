@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BarChart3, Loader2, ShieldAlert, Sparkles, Target } from 'lucide-react';
+import { AlertTriangle, BarChart3, Loader2, ShieldAlert, Sparkles, Target, Scale } from 'lucide-react';
 import { useScenarioCopilot } from '../../../hooks/useScenarioCopilot';
 import { SCENARIO_DEFINITIONS } from '../../../utils/intelligence/scenarioSimulator';
-import { ScenarioResult } from '../../../types/scenario';
+import { ScenarioArbitrationResult, ScenarioResult } from '../../../types/scenario';
 
 interface ScenarioStressCopilotProps {
   symbol: string;
@@ -34,20 +34,66 @@ function severityColors(severity: 'low' | 'medium' | 'high'): string {
   return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-200';
 }
 
+function ArbitrationPanel({ arbitration }: { arbitration: ScenarioArbitrationResult }) {
+  return (
+    <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Scale className="h-5 w-5 text-blue-500" />
+          <div>
+            <p className="text-xs uppercase tracking-wide text-gray-400">Scenario Arbitration</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              Consensus {Math.round(arbitration.blendedConfidence * 100)}% confidence
+            </p>
+          </div>
+        </div>
+      </div>
+      <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">{arbitration.consensusRecommendation}</p>
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+        {arbitration.modelEvaluations.map((model) => (
+          <div key={model.modelId} className="border border-gray-200 dark:border-dark-200 rounded-md p-3">
+            <p className="text-xs uppercase tracking-wide text-gray-400">{model.label}</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1">
+              {(model.confidence * 100).toFixed(0)}% confidence
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{model.rationale}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ScenarioStressCopilot({ symbol }: ScenarioStressCopilotProps) {
   const { baselines, isLoading, isValidating, isError, runScenario, generatePlaybook } = useScenarioCopilot(symbol);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>(SCENARIO_DEFINITIONS[0].id);
   const [result, setResult] = useState<ScenarioResult | null>(null);
+  const [arbitration, setArbitration] = useState<ScenarioArbitrationResult | null>(null);
   const [playbook, setPlaybook] = useState<string>('');
   const [isGeneratingPlaybook, setIsGeneratingPlaybook] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
 
   const baselineBySymbol = useMemo(() => new Map(baselines.map((item) => [item.symbol, item])), [baselines]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!baselines.length) return;
-    const computed = runScenario(selectedScenarioId);
-    setResult(computed);
-    setPlaybook('');
+
+    const evaluateScenario = async () => {
+      setIsEvaluating(true);
+      const evaluation = await runScenario(selectedScenarioId);
+      if (cancelled) return;
+      setResult(evaluation?.result ?? null);
+      setArbitration(evaluation?.arbitration ?? null);
+      setPlaybook('');
+      setIsEvaluating(false);
+    };
+
+    evaluateScenario();
+
+    return () => {
+      cancelled = true;
+    };
   }, [baselines, runScenario, selectedScenarioId]);
 
   const handleScenarioChange = (scenarioId: string) => {
@@ -62,11 +108,11 @@ export default function ScenarioStressCopilot({ symbol }: ScenarioStressCopilotP
     setIsGeneratingPlaybook(false);
   };
 
-  if (isLoading) {
+  if (isLoading || isEvaluating) {
     return (
       <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-8 text-center">
         <Loader2 className="h-6 w-6 mx-auto text-blue-500 animate-spin" />
-        <p className="mt-3 text-sm text-gray-500">Calibrating scenario baselines...</p>
+        <p className="mt-3 text-sm text-gray-500">Calibrating scenario intelligence...</p>
       </div>
     );
   }
@@ -106,7 +152,7 @@ export default function ScenarioStressCopilot({ symbol }: ScenarioStressCopilotP
           </div>
           <div className="flex items-center gap-3">
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${severityColors(scenario.severity)}`}>
-              {scenario.severity.toUpperCase()} STRESS • {scenario.stressHorizonDays}D horizon
+              {scenario.severity.toUpperCase()} STRESS | {scenario.stressHorizonDays}D horizon
             </span>
             {isValidating && (
               <span className="text-xs text-gray-400 flex items-center gap-2">
@@ -134,6 +180,8 @@ export default function ScenarioStressCopilot({ symbol }: ScenarioStressCopilotP
           ))}
         </div>
       </div>
+
+      {arbitration && <ArbitrationPanel arbitration={arbitration} />}
 
       <div className="bg-white dark:bg-dark-100 rounded-lg shadow p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
